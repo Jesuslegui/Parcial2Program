@@ -1,0 +1,173 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""
+Generación de informe en documento Word (.docx) para el análisis de medidas de dispersión
+en datos de esterilización canina y felina 2021.
+
+Este script carga datos desde un archivo Excel, calcula medidas de dispersión (rango, varianza, 
+desviación estándar y coeficiente de variación), genera un gráfico boxplot y crea un informe en formato 
+Word que incluye los resultados y un análisis descriptivo.
+
+Autor: Jesús
+Fecha: 2025-04-12
+"""
+
+import os
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from docx import Document
+from docx.shared import Pt, Inches
+
+def load_data(file_path):
+    """
+    Carga los datos de esterilización desde un archivo Excel.
+
+    Parámetros:
+        file_path (str): Ruta del archivo Excel.
+
+    Retorna:
+        DataFrame: DataFrame con los datos.
+    """
+    if not os.path.exists(file_path):
+        print(f"Error: El archivo '{file_path}' no existe. Verifica la ruta.")
+        return None
+    
+    try:
+        df = pd.read_excel(file_path)
+        print("Datos cargados con éxito.")
+        return df
+    except Exception as e:
+        print("Error al cargar datos:", e)
+        return None
+
+def calculate_dispersion_measures(data):
+    """
+    Calcula las medidas de dispersión para una serie numérica.
+
+    Las medidas calculadas incluyen:
+        - Máximo y Mínimo
+        - Rango: diferencia entre el valor máximo y el mínimo.
+        - Media
+        - Varianza (muestral, ddof=1)
+        - Desviación Estándar
+        - Coeficiente de Variación (%)
+
+    Parámetros:
+        data (pd.Series): Serie numérica con los datos de esterilización.
+
+    Retorna:
+        dict: Diccionario con las medidas calculadas.
+    """
+    measures = {}
+    measures["Máximo"] = data.max()
+    measures["Mínimo"] = data.min()
+    measures["Rango"] = data.max() - data.min()
+    mean_value = data.mean()
+    measures["Media"] = mean_value
+    measures["Varianza"] = np.var(data, ddof=1)
+    measures["Desviación Estándar"] = np.sqrt(measures["Varianza"])
+    measures["Coeficiente de Variación (%)"] = (measures["Desviación Estándar"] / mean_value) * 100 if mean_value != 0 else np.nan
+    return measures
+
+def plot_boxplot(data, img_file="boxplot.png"):
+    """
+    Genera un diagrama boxplot de los datos y lo guarda en un archivo de imagen.
+
+    Parámetros:
+        data (pd.Series): Serie numérica con los datos.
+        img_file (str): Ruta del archivo de imagen de salida.
+    """
+    plt.figure(figsize=(8, 6))
+    sns.boxplot(data=data)
+    plt.title("Boxplot - Esterilización Mensual")
+    plt.xlabel("Datos")
+    plt.ylabel("Cantidad de Esterilizaciones")
+    plt.savefig(img_file)
+    plt.close()
+    print(f"Gráfico boxplot guardado en {img_file}.")
+
+def generate_docx_report(docx_path, measures, img_file=None):
+    """
+    Genera un informe en un documento Word (.docx) que incluye 
+    la introducción, los resultados del análisis y el gráfico de dispersión.
+
+    Parámetros:
+        docx_path (str): Ruta de guardado del documento Word.
+        measures (dict): Diccionario con las medidas de dispersión calculadas.
+        img_file (str): Archivo de imagen del gráfico (opcional).
+    """
+    document = Document()
+    
+    # Título del informe
+    document.add_heading("Informe: Análisis de Medidas de Dispersión en Datos de Esterilización Canina y Felina", 0)
+    
+    # Introducción
+    p = document.add_paragraph()
+    p.add_run("Introducción:\n").bold = True
+    p.add_run(
+        "Comprender las medidas de dispersión es clave para interpretar correctamente los datos en salud pública veterinaria. "
+        "Este informe analiza las cifras mensuales de esterilización canina y felina del año 2021, evaluando la estabilidad y variabilidad "
+        "de los procedimientos a través de diversas medidas estadísticas."
+    )
+    
+    # Sección: Medidas de Dispersión
+    document.add_heading("Medidas de Dispersión", level=1)
+    document.add_paragraph("Las medidas de dispersión cuantifican la variabilidad de un conjunto de datos en relación con su media, permitiendo "
+                           "identificar cuán separados se encuentran los valores.")
+
+    # Sección: Análisis Aplicado a los Datos
+    document.add_heading("Análisis Aplicado a los Datos", level=1)
+    
+    # Agregar una tabla con los resultados
+    table = document.add_table(rows=1, cols=2)
+    hdr_cells = table.rows[0].cells
+    hdr_cells[0].text = "Medida"
+    hdr_cells[1].text = "Valor"
+    
+    for key, value in measures.items():
+        row_cells = table.add_row().cells
+        row_cells[0].text = str(key)
+        row_cells[1].text = f"{value:.2f}" if isinstance(value, (int, float)) else str(value)
+    
+    # Sección: Representación Gráfica
+    if img_file:
+        document.add_heading("Representación Gráfica", level=1)
+        document.add_picture(img_file, width=Inches(6))
+    
+    # Guardar el documento
+    document.save(docx_path)
+    print(f"Informe generado y guardado en {docx_path}.")
+
+def main():
+    file_path = "Esterilizacion_Canina_y_Felina_2021.xlsx"
+    docx_path = "Informe_Esterilizacion.docx"
+    
+    df = load_data(file_path)
+    if df is None:
+        return
+    
+    if "Esterilizaciones" in df.columns:
+        data = df["Esterilizaciones"]
+    elif "Canina" in df.columns and "Felina" in df.columns:
+        df["Esterilizaciones"] = df["Canina"] + df["Felina"]
+        data = df["Esterilizaciones"]
+    else:
+        print("No se encontraron las columnas esperadas en el archivo Excel.")
+        return
+    
+    measures = calculate_dispersion_measures(data)
+    
+    img_file = "boxplot.png"
+    plot_boxplot(data, img_file)
+    
+    generate_docx_report(docx_path, measures, img_file)
+    
+    print("\nMedidas de dispersión:")
+    for key, value in measures.items():
+        print(f"{key}: {value:.2f}" if isinstance(value, (int, float)) else f"{key}: {value}")
+
+if __name__ == "__main__":
+    main()
